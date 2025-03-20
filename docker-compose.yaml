@@ -1,1 +1,103 @@
+version: '3.9'
+
+services:
+  
+  cowrie:
+    image: cowrie/cowrie:latest
+    container_name: cowrie_honeypot
+    restart: always
+    volumes:
+      - ./cowrie/cowrie.cfg:/cowrie/cowrie.cfg  
+      - ./logs/cowrie:/cowrie/log  
+    ports:
+      - "2222:2222"  
+      - "2223:2223"  
+    environment:
+      - COWRIE_LOG_PATH=/cowrie/log/cowrie.json
+    networks:
+      - honeynet
+
+  dionaea:
+    image: dionaea/dionaea:latest
+    container_name: dionaea_honeypot
+    restart: always
+    volumes:
+      - ./dionaea/dionaea.cfg:/etc/dionaea/dionaea.cfg  
+      - ./logs/dionaea:/var/log/dionaea  
+      - ./malware_samples:/var/malware_samples  
+    ports:
+      - "21:21"   # FTP
+      - "80:80"   # HTTP
+      - "445:445" # SMB
+      - "1433:1433" # MSSQL
+      - "3306:3306" # MySQL
+    environment:
+      - DIONAEA_LOG_PATH=/var/log/dionaea/dionaea.json
+    networks:
+      - honeynet
+
+  splunk:
+    image: splunk/splunk:latest
+    container_name: splunk_server
+    restart: always
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=${SPLUNK_PASSWORD}  # Load from .env
+      - SPLUNK_HEC_TOKEN=${SPLUNK_HEC_TOKEN}  # Load from .env
+    volumes:
+      - ./splunk/etc:/opt/splunk/etc  # Configuration
+      - ./splunk/var:/opt/splunk/var  # Log storage
+    ports:
+      - "8000:8000"  # Web Interface
+      - "8088:8088"  # HTTP Event Collector
+    networks:
+      - honeynet
+    depends_on:
+      - cowrie
+      - dionaea
+
+  threat_intelligence:
+    image: python:3.9
+    container_name: threat_intel_service
+    restart: always
+    volumes:
+      - ./services/threat_intelligence.py:/app/threat_intelligence.py  # Python script
+    environment:
+      - ABUSEIPDB_API_KEY=${ABUSEIPDB_API_KEY}
+      - VIRUSTOTAL_API_KEY=${VIRUSTOTAL_API_KEY}
+      - SHODAN_API_KEY=${SHODAN_API_KEY}
+    networks:
+      - honeynet
+    depends_on:
+      - cowrie
+      - dionaea
+
+  alert_system:
+    image: python:3.9
+    container_name: alert_service
+    restart: always
+    volumes:
+      - ./services/alert_system.py:/app/alert_system.py
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - EMAIL_RECEIVER=${EMAIL_RECEIVER}
+    networks:
+      - honeynet
+    depends_on:
+      - threat_intelligence
+
+  backup:
+    image: ubuntu
+    container_name: backup_service
+    restart: always
+    volumes:
+      - ./backup_logs.sh:/app/backup_logs.sh
+      - ./logs:/var/logs
+    command: [ "bash", "/app/backup_logs.sh" ]
+    networks:
+      - honeynet
+
+networks:
+  honeynet:
+    driver: bridge
 
