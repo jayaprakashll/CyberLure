@@ -55,7 +55,7 @@ CyberLure is a high-interaction honeypot designed to detect and analyze real-wor
 - Analyze logs periodically for evolving attack trends.
 - Implement IP blocking for repeated threats.
 
-##NOTE
+## NOTE
 In the data/malware_samples/ directory, you should store captured malware samples for analysis
 
 ##  Future Enhancements
